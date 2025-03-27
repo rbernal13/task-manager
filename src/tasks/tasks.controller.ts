@@ -1,56 +1,83 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, NotFoundException, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  NotFoundException,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { TasksService } from './tasks.service';
-import { ITask } from './models/task.model';
-import { CreateTaskDto } from './dtos/create-task.dto';
-import { FindTaskDto } from './dtos/find-task.dto';
-import { UpdateTaskDto } from './dtos/update-task.dto';
+import { ITask } from './task.model';
+import { CreateTaskDto } from './create-task.dto';
+import { FindOneParams } from './find-one.params';
+import { UpdateTaskStatusDto } from './update-task-status.dto';
+import { UpdateTaskDto } from './update-task.dto';
+import { WrongTaskStatusException } from './exceptions/wrong-task-status.exception';
 
 @Controller('tasks')
 export class TasksController {
+  constructor(private readonly tasksService: TasksService) {}
 
-    constructor(private readonly tasksService: TasksService) {
+  @Get()
+  public findAll(): ITask[] {
+    return this.tasksService.findAll();
+  }
 
+  @Get('/:id')
+  public findOne(@Param() params: FindOneParams): ITask {
+    return this.findOneOrFail(params.id);
+  }
+
+  @Post()
+  public create(@Body() createTaskDto: CreateTaskDto) {
+    return this.tasksService.create(createTaskDto);
+  }
+
+  // @Patch('/:id/status')
+  // public updateTaskStatus(
+  //   @Param() params: FindOneParams,
+  //   @Body() body: UpdateTaskStatusDto,
+  // ): ITask {
+  //   const task = this.findOneOrFail(params.id);
+  //   task.status = body.status;
+  //   return task;
+  // }
+
+  @Patch('/:id')
+  public updateTask(
+    @Param() params: FindOneParams,
+    @Body() updateTaskDto: UpdateTaskDto,
+  ): ITask {
+    const task = this.findOneOrFail(params.id);
+    try {
+      return this.tasksService.updateTask(task, updateTaskDto);
+    } catch (error) {
+      if (error instanceof WrongTaskStatusException) {
+        throw new BadRequestException([error.message]);
+      }
+      throw error;
+    }
+  }
+
+  @Delete('/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  public deleteTask(@Param() params: FindOneParams): void {
+    const task = this.findOneOrFail(params.id);
+    this.tasksService.deleteTask(task);
+  }
+
+  private findOneOrFail(id: string): ITask {
+    const task = this.tasksService.findOne(id);
+
+    if (!task) {
+      throw new NotFoundException();
     }
 
-    @Get('findAll')
-    public findAll(): ITask[] {
-        const response = this.tasksService.findAll();
-        return response;
-    }
-
-    @Get('findOne')
-    public findOne(@Query() params: FindTaskDto): ITask {
-        const response = this.tasksService.findOne(params);
-        if (response) {
-            return response;
-        }
-        throw new NotFoundException(`Task with ID: ${params.taskId} not found.`);
-    }
-
-    @Post('create')
-    public createTask(@Body() createTaskDto: CreateTaskDto): ITask {
-        const response = this.tasksService.createTask(createTaskDto);
-        return response;
-    }
-
-    @Patch('updateStatus')
-    public updateStatus(@Query() params: FindTaskDto, @Body() updateTaskDto: UpdateTaskDto): ITask {
-        const task = this.tasksService.findOne(params);
-        if (task) {
-            task.status = updateTaskDto.status;
-            return task;
-        }
-        throw new NotFoundException(`Task with ID: ${params.taskId} not found.`);
-    }
-    
-    @Delete('deleteOne')
-    @HttpCode(HttpStatus.NO_CONTENT)
-    public deleteOne(@Query() params: FindTaskDto): void {
-        const task = this.tasksService.findOne(params);
-        if (task) {
-            this.tasksService.deleteTask(params.taskId);
-        } else {
-            throw new NotFoundException(`Task with ID: ${params.taskId} not found.`);
-        }
-    }
+    return task;
+  }
 }
